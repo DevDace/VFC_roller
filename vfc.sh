@@ -1,10 +1,18 @@
 #!/bin/bash
 
 ########
-# VARS
+# INPUT VARS
 ########
 
-INPUT_SHOTS=3d6
+INPUT_SHOTS=2d6
+BS=3
+STR=8
+AP=2
+DMG=1d3
+TOU=4
+SAV=2
+WOU=3
+MODELS=3
 
 ########
 # FUNC
@@ -15,23 +23,172 @@ INPUT_SHOTS=3d6
 # $1: size of the dice
 ##
 roll_dice() {
-  echo $(shuf -i 1-$1 -n 1)
+  shuf -i 1-"$1" -n 1
   exit 0
 }
 
-########
-# SHOTS
-########
-if [[ $INPUT_SHOTS =~ [dD] ]]; then
-  n=$(sed -r 's/[dD][0-9]+//' <<< $INPUT_SHOTS)
-  dice=$(sed -r 's/[0-9]+[dD]//' <<< $INPUT_SHOTS)
+##
+# Compute number of SHOTS
+##
+#
+##
+compute_shots() {
+  if [[ $INPUT_SHOTS =~ [dD] ]]; then
+    # number of rolls
+    n=$(sed -r 's/[dD][0-9]+//' <<< $INPUT_SHOTS)
+    # die size
+    dice=$(sed -r 's/[0-9]+[dD]//' <<< $INPUT_SHOTS)
 
-  SHOTS=0
-  for ((i=0; i<$n; i++)); do
-    rolled=$(roll_dice $dice)
-    SHOTS=$((SHOTS + rolled))
+    # let's get rolling
+    SHOTS=0
+    for ((i=0; i<n; i++)); do
+      rolled=$(roll_dice "$dice")
+      SHOTS=$((SHOTS + rolled))
+    done
+  else
+    SHOTS=$INPUT_SHOTS
+  fi
+  echo "$SHOTS shots"
+}
+
+##
+# Compute number of HITS
+##
+#
+##
+compute_hits() {
+  HITS=0
+  for ((i=0; i<SHOTS; i++)); do
+    rolled=$(roll_dice 6)
+
+    # roll of 1 always fail
+    [[ $BS -lt 2 ]] && BS=2
+
+    if [[ $rolled -ge $BS ]]; then
+      HITS=$((HITS + 1))
+    fi
   done
-else
-  SHOTS=$INPUT_SHOTS
-fi
-echo "$SHOTS shots"
+  echo "$HITS hits"
+}
+
+##
+# Compute number of WOUNDS
+##
+#
+##
+compute_wounds() {
+  WOUNDS=0
+  for ((i=0; i<HITS; i++)); do
+    rolled=$(roll_dice 6)
+
+    diff_w=$((STR-TOU))
+
+
+    # compute roll threshold
+    threshold_w=$((
+      diff_w == 0     ? 4 :
+      diff_w >= TOU   ? 2 :
+      diff_w > 0      ? 3 :
+      diff_w <= -STR  ? 6 :
+      diff_w < 0      ? 5 :
+      255))
+    [[ $threshold_w -eq 255 ]] && echo "This is heresy" && exit 250
+
+    if [[ $rolled -ge $threshold_w ]]; then
+      WOUNDS=$((WOUNDS + 1))
+    fi
+ 
+  done
+  echo "$WOUNDS wounds"
+}
+
+
+##
+# Compute number of failed SAVES
+##
+#
+##
+compute_saves() {
+  F_SAVES=0
+  for ((i=0; i<WOUNDS; i++)); do
+    rolled=$(roll_dice 6)
+
+    threshold_s=$((SAV-AP))
+
+    # roll of 1 always a fail
+    [[ $threshold_s -lt 2 ]] && threshold_s=2
+
+    if [[ $rolled -lt $threshold_s ]]; then
+      F_SAVES=$((F_SAVES + 1))
+    fi
+  done
+  echo "$F_SAVES failed saves"
+}
+
+##
+# Compute number of DAMAGES
+##
+#
+##
+compute_dmg() {
+  TOTAL_DMG=0
+  CURRENT_MODEL_HP=$WOU
+  KILLED=0
+  if [[ $MODELS -gt 1 ]] && [[ $WOU -eq 1 ]]; then
+    KILLED=$((KILLED + 1))
+
+    echo "$KILLED models killed"
+    exit 0
+  fi
+
+
+  # Compute dmg rolls parameters
+  if [[ $DMG =~ [dD] ]]; then
+    # number of rolls
+    n=$(sed -r 's/[dD][0-9]+//' <<< $DMG)
+    # die size
+    dice=$(sed -r 's/[0-9]+[dD]//' <<< $DMG)
+
+    roll_dmg=1
+  fi
+
+  for ((i=0; i<F_SAVES; i++)); do
+    # Compute dmg done
+    if [[ -n $roll_dmg ]]; then
+      dmg_dealt=0
+      for ((j=0; j<n; j++)); do
+        rolled=$(roll_dice "$dice")
+        dmg_dealt=$((dmg_dealt + rolled))
+      done
+    else
+      dmg_dealt=$DMG
+    fi
+    TOTAL_DMG=$((TOTAL_DMG + dmg_dealt))
+
+
+    # Check if we killed a model
+    CURRENT_MODEL_HP=$((CURRENT_MODEL_HP - dmg_dealt))
+    if [[ $CURRENT_MODEL_HP -le 0 ]]; then
+      CURRENT_MODEL_HP=$WOU
+      KILLED=$((KILLED + 1))
+    fi
+  done
+
+  echo "$TOTAL_DMG total dmg done"
+  echo "$KILLED models killed"
+  echo "$CURRENT_MODEL_HP HP left on a model"
+}
+
+########
+# MAIN
+########
+
+compute_shots
+
+compute_hits
+
+compute_wounds
+
+compute_saves
+
+compute_dmg
