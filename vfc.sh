@@ -61,7 +61,7 @@ compute_hits() {
   for ((i=0; i<SHOTS; i++)); do
     rolled=$(roll_dice 6)
 
-    # roll of 1 always fail
+    # roll of 1 always fail, so BS2 is the best case used
     [[ $BS -lt 2 ]] && BS=2
 
     if [[ $rolled -ge $BS ]]; then
@@ -83,8 +83,7 @@ compute_wounds() {
 
     diff_w=$((STR-TOU))
 
-
-    # compute roll threshold
+    # compute roll threshold, i.e. target number to wound
     threshold_w=$((
       diff_w == 0     ? 4 :
       diff_w >= TOU   ? 2 :
@@ -97,7 +96,6 @@ compute_wounds() {
     if [[ $rolled -ge $threshold_w ]]; then
       WOUNDS=$((WOUNDS + 1))
     fi
- 
   done
   echo "$WOUNDS wounds"
 }
@@ -113,9 +111,10 @@ compute_saves() {
   for ((i=0; i<WOUNDS; i++)); do
     rolled=$(roll_dice 6)
 
+    # AP is saved as a negative number, so substracting it to the save value gives the real value
     threshold_s=$((SAV-AP))
 
-    # roll of 1 always a fail
+    # roll of 1 always a fail: a better than 2+ save is treated as a 2+
     [[ $threshold_s -lt 2 ]] && threshold_s=2
 
     if [[ $rolled -lt $threshold_s ]]; then
@@ -134,11 +133,12 @@ compute_dmg() {
   TOTAL_DMG=0
   CURRENT_MODEL_HP=$WOU
   KILLED=0
+  # TODO improve this if for the following cases: single big unit, large unit of 1W units, small unit of multi-wounds models
   if [[ $MODELS -gt 1 ]] && [[ $WOU -eq 1 ]]; then
     KILLED=$((KILLED + 1))
 
     echo "$KILLED models killed"
-    exit 0
+    return 0
   fi
 
 
@@ -176,7 +176,10 @@ compute_dmg() {
 
   echo "$TOTAL_DMG total dmg done"
   echo "$KILLED models killed"
-  echo "$CURRENT_MODEL_HP HP left on a model"
+  if [[ $KILLED -ne $MODELS ]]; then
+    # TODO improve the if for the case we did 0 damage to a unit
+    echo "${CURRENT_MODEL_HP}/${WOU} HP left on a model"
+  fi
 }
 
 ########
@@ -192,3 +195,5 @@ compute_wounds
 compute_saves
 
 compute_dmg
+
+exit 0
