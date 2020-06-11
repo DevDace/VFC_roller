@@ -4,8 +4,9 @@
 # INPUT VARS
 ########
 
+# standard inputs
 INPUT_SHOTS=2d6
-BS=3
+BS=4
 STR=8
 AP=2
 DMG=1d3
@@ -13,6 +14,16 @@ TOU=4
 SAV=2
 WOU=3
 MODELS=3
+
+# modifiers inputs
+HIT_REROLL=2
+HIT_BONUS=1
+HIT_MALUS=
+HIT_EXPLOSION_TARGET=6
+HIT_EXPLOSION_FIXED=1 #can be modified with malus/bonus
+HIT_EXPLOSION_TYPE=1 #1: tesla, 2: free attacks
+HIT_EXPLOSION_NUMBER=2 #number of bonus attacks/hits
+
 
 ########
 # FUNC
@@ -39,12 +50,14 @@ compute_shots() {
     # die size
     dice=$(sed -r 's/[0-9]+[dD]//' <<< $INPUT_SHOTS)
 
-    # let's get rolling
+    # normal roll
     SHOTS=0
     for ((i=0; i<n; i++)); do
       rolled=$(roll_dice "$dice")
       SHOTS=$((SHOTS + rolled))
     done
+
+
   else
     SHOTS=$INPUT_SHOTS
   fi
@@ -58,14 +71,26 @@ compute_shots() {
 ##
 compute_hits() {
   HITS=0
+
+  TBS=$((BS - HIT_BONUS + HIT_MALUS))
+
   for ((i=0; i<SHOTS; i++)); do
     rolled=$(roll_dice 6)
 
     # roll of 1 always fail, so BS2 is the best case used
-    [[ $BS -lt 2 ]] && BS=2
+    [[ $TBS -lt 2 ]] && TBS=2
 
-    if [[ $rolled -ge $BS ]]; then
+    if [[ $rolled -ge $TBS ]]; then
       HITS=$((HITS + 1))
+    else
+      if [[ $HIT_REROLL ]]; then
+        if [[ $rolled -le $HIT_REROLL ]]; then
+          rolled=$(roll_dice 6)
+          if [[ $rolled -ge $BS ]]; then
+            HITS=$((HITS + 1))
+          fi
+        fi
+      fi
     fi
   done
   echo "$HITS hits"
